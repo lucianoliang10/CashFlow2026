@@ -357,6 +357,20 @@ with st.expander("Detalhar Itens", expanded=True):
         else:
             st.warning("Selecione ao menos um item para aplicar o valor mensal.")
 
+    if st.button("Adicionar item"):
+        default_row = {
+            "Tipo": "Outflow",
+            "Categoria": CATEGORY_OPTIONS[0],
+            "Subcategoria": SUBCATEGORY_OPTIONS[0],
+            "Item": "",
+        }
+        for month in MONTHS:
+            default_row[month] = 0.0
+        outflow_items = pd.concat(
+            [outflow_items, pd.DataFrame([default_row])], ignore_index=True
+        )
+        st.session_state["outflow_items"] = outflow_items
+
     edited_items = st.data_editor(
         outflow_items,
         hide_index=True,
