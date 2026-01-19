@@ -19,8 +19,51 @@ MONTHS = [
     "Nov/26",
     "Dec/26",
 ]
-MONTH_COLUMNS = [f"m{index + 1}" for index in range(12)]
 INITIAL_BALANCE = 25_542_000.00
+INFLOW_SUBCATEGORIES = [
+    "Awards",
+    "Broadcast",
+    "Matchday",
+    "Marketing & Commercial",
+    "Sponsor",
+    "Space Lease",
+    "Fan Program",
+    "Licensing",
+    "Merchandising",
+    "Social Medias",
+]
+OUTFLOW_STRUCTURES = {
+    "Payroll Men’s Football*": [
+        "Salary (M)",
+        "Image Right",
+        "Signing Fee (Image)",
+        "Payroll Taxes (M)",
+        "Professional Services (M)",
+        "Merit Payments",
+    ],
+    "Payroll Youth & Women’s Football*": [
+        "Salary (YW)",
+        "Payroll Taxes (YW)",
+        "Professional Services (YW)",
+    ],
+    "Payroll Corporate*": [
+        "Salary (Corporate)",
+        "Payroll Taxes (Corporate)",
+        "Professional Services (Corporate)",
+    ],
+    "Other Payroll Expenses*": ["Benefits"],
+    "Suppliers*": [
+        "General Suppliers",
+        "Matchday",
+        "Logistics Expenses",
+        "Utility Bills",
+        "Merchandising",
+    ],
+    "Taxes*": [
+        "Football Specific Tribute (TEF)",
+        "Other Taxes",
+    ],
+}
 
 
 def get_connection() -> sqlite3.Connection:
@@ -98,9 +141,22 @@ def persist_outflow_items(df: pd.DataFrame) -> None:
 
 
 def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
-    inflow = pd.Series([0.0] * 12, index=MONTHS)
-    outflow = outflow_df[MONTHS].sum(axis=0)
-    net = inflow - outflow
+    base_series = pd.Series([0.0] * 12, index=MONTHS)
+    inflow_subcategories = {
+        name: base_series.copy() for name in INFLOW_SUBCATEGORIES
+    }
+    outflow_matchday = outflow_df[MONTHS].sum(axis=0)
+    outflow_subcategories: dict[str, pd.Series] = {}
+    for category, subcategories in OUTFLOW_STRUCTURES.items():
+        for name in subcategories:
+            if category == "Suppliers*" and name == "Matchday":
+                outflow_subcategories[name] = outflow_matchday
+            else:
+                outflow_subcategories[name] = base_series.copy()
+
+    inflow_total = sum(inflow_subcategories.values(), base_series.copy())
+    outflow_total = sum(outflow_subcategories.values(), base_series.copy())
+    net = inflow_total - outflow_total
 
     saldo = []
     running = INITIAL_BALANCE
@@ -108,15 +164,25 @@ def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
         running += value
         saldo.append(running)
 
-    summary = pd.DataFrame(
-        {
-            "Inflow Matchday": inflow.values,
-            "Outflow Matchday": outflow.values,
-            "Net": net.values,
-            "Saldo Acumulado": saldo,
-        },
-        index=MONTHS,
-    ).T
+    rows: list[tuple[str, pd.Series | pd.Index]] = []
+    rows.append(("Inflows", pd.Series([pd.NA] * 12, index=MONTHS)))
+    rows.append(("Football Revenues*", inflow_total))
+    for name in INFLOW_SUBCATEGORIES:
+        rows.append((name, inflow_subcategories[name]))
+    rows.append(("Outflows", pd.Series([pd.NA] * 12, index=MONTHS)))
+    for category, subcategories in OUTFLOW_STRUCTURES.items():
+        category_total = sum(
+            (outflow_subcategories[name] for name in subcategories),
+            base_series.copy(),
+        )
+        rows.append((category, category_total))
+        for name in subcategories:
+            rows.append((name, outflow_subcategories[name]))
+    rows.append(("Net", net))
+    rows.append(("Saldo Acumulado", pd.Series(saldo, index=MONTHS)))
+
+    data = {name: values.values for name, values in rows}
+    summary = pd.DataFrame(data, index=MONTHS).T
     return summary
 
 
