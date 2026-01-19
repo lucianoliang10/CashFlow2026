@@ -125,17 +125,28 @@ def load_outflow_items() -> pd.DataFrame:
 
 
 def persist_outflow_items(df: pd.DataFrame) -> None:
+    cleaned = df.dropna(subset=["Item"]).copy()
+    if cleaned.empty:
+        items = []
+    else:
+        cleaned["Item"] = cleaned["Item"].astype(str).str.strip()
+        for month in MONTHS:
+            cleaned[month] = pd.to_numeric(cleaned[month], errors="coerce").fillna(0.0)
+        items = [
+            (row["Item"],) + tuple(row[month] for month in MONTHS)
+            for _, row in cleaned.iterrows()
+        ]
     with get_connection() as connection:
-        for _, row in df.iterrows():
-            values = [row[month] for month in MONTHS]
-            connection.execute(
+        connection.execute("DELETE FROM outflow_items")
+        if items:
+            connection.executemany(
                 """
-                UPDATE outflow_items
-                SET m1 = ?, m2 = ?, m3 = ?, m4 = ?, m5 = ?, m6 = ?, m7 = ?,
-                    m8 = ?, m9 = ?, m10 = ?, m11 = ?, m12 = ?
-                WHERE item = ?
+                INSERT INTO outflow_items (
+                    item, m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (*values, row["Item"]),
+                items,
             )
         connection.commit()
 
@@ -143,10 +154,11 @@ def persist_outflow_items(df: pd.DataFrame) -> None:
 def format_currency(value: float) -> str:
     if pd.isna(value):
         return ""
-    if value == 0:
+    scaled = value / 1000
+    if scaled == 0:
         return "-"
-    formatted = f"{abs(value):,.0f}".replace(",", ".")
-    if value < 0:
+    formatted = f"{abs(scaled):,.0f}".replace(",", ".")
+    if scaled < 0:
         return f"({formatted})"
     return formatted
 
@@ -156,7 +168,8 @@ def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
     inflow_subcategories = {
         name: base_series.copy() for name in INFLOW_SUBCATEGORIES
     }
-    outflow_matchday = outflow_df[MONTHS].sum(axis=0)
+    outflow_values = outflow_df[MONTHS].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    outflow_matchday = outflow_values.sum(axis=0)
     outflow_subcategories: dict[str, pd.Series] = {}
     for category, subcategories in OUTFLOW_STRUCTURES.items():
         for name in subcategories:
@@ -196,7 +209,6 @@ def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
         rows.append((category, outflow_category_totals[category]))
         for name in subcategories:
             rows.append((name, outflow_subcategories[name]))
-    rows.append(("Net", net))
 
     data = {name: values.values for name, values in rows}
     summary = pd.DataFrame(data, index=MONTHS).T
@@ -209,20 +221,88 @@ st.title("Projeção de Caixa 2026")
 
 initialize_database()
 
-outflow_items = load_outflow_items()
+if "outflow_items" not in st.session_state:
+    st.session_state["outflow_items"] = load_outflow_items()
+
+outflow_items = st.session_state["outflow_items"]
 
 with st.expander("Detalhar Outflow Matchday", expanded=True):
+    st.caption(
+        "Edite valores diretamente, adicione ou remova linhas, aplique valores "
+        "mensais em lote ou importe uma planilha."
+    )
+    upload = st.file_uploader(
+        "Importar planilha (Excel)",
+        type=["xlsx", "xls"],
+    )
+    if upload is not None and st.button("Aplicar planilha"):
+        try:
+            imported = pd.read_excel(upload)
+        except ImportError:
+            st.error(
+                "Biblioteca necessária para ler Excel ausente. "
+                "Instale o suporte no ambiente para importar."
+            )
+        else:
+            expected_columns = {"Item", *MONTHS}
+            if not expected_columns.issubset(set(imported.columns)):
+                st.error("A planilha precisa ter colunas: Item e Jan/26 a Dec/26.")
+            else:
+                imported = imported[["Item", *MONTHS]]
+                st.session_state["outflow_items"] = imported
+                outflow_items = imported
+                persist_outflow_items(imported)
+                st.success("Planilha importada com sucesso.")
+
+    st.markdown("**Aplicar valor mensal em lote**")
+    selected_items = st.multiselect(
+        "Itens para aplicar",
+        options=outflow_items["Item"].tolist(),
+    )
+    monthly_value = st.number_input(
+        "Valor mensal",
+        min_value=0.0,
+        step=1000.0,
+        value=0.0,
+        format="%.2f",
+    )
+    if st.button("Aplicar valor mensal"):
+        if selected_items:
+            updated = outflow_items.copy()
+            updated.loc[updated["Item"].isin(selected_items), MONTHS] = monthly_value
+            st.session_state["outflow_items"] = updated
+            outflow_items = updated
+            persist_outflow_items(updated)
+            st.success("Valores mensais aplicados.")
+        else:
+            st.warning("Selecione ao menos um item para aplicar o valor mensal.")
+
     edited_items = st.data_editor(
         outflow_items,
         hide_index=True,
-        num_rows="fixed",
+        num_rows="dynamic",
         use_container_width=True,
+        key="outflow_editor",
     )
 
-persist_outflow_items(edited_items)
+if st.button("Salvar alterações"):
+    persist_outflow_items(edited_items)
+    st.session_state["outflow_items"] = edited_items
+    st.success("Alterações salvas.")
 
 summary = compute_summary(edited_items)
 
 st.subheader("Resumo Mensal")
-styled_summary = summary.style.format(format_currency)
+highlight_rows = ["Inflows", "Outflows"]
+
+
+def highlight_categories(row: pd.Series) -> list[str]:
+    if row.name in highlight_rows:
+        return ["background-color: #f0f2f6; font-weight: 600"] * len(row)
+    return [""] * len(row)
+
+
+styled_summary = summary.style.format(format_currency).apply(
+    highlight_categories, axis=1
+)
 st.dataframe(styled_summary, use_container_width=True)
