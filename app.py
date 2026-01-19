@@ -22,7 +22,7 @@ MONTHS = [
 MONTH_COLUMNS = [f"m{index + 1}" for index in range(12)]
 INITIAL_BALANCE = 25_542_000.00
 INFLOW_CATEGORIES = {
-    "Football Revenues*": [
+    "Football Revenues": [
         "Awards",
         "Broadcast",
         "Matchday",
@@ -36,7 +36,7 @@ INFLOW_CATEGORIES = {
     ],
 }
 OUTFLOW_CATEGORIES = {
-    "Payroll Men’s Football*": [
+    "Payroll Men’s Football": [
         "Salary (M)",
         "Image Right",
         "Signing Fee (Image)",
@@ -44,18 +44,18 @@ OUTFLOW_CATEGORIES = {
         "Professional Services (M)",
         "Merit Payments",
     ],
-    "Payroll Youth & Women’s Football*": [
+    "Payroll Youth & Women’s Football": [
         "Salary (YW)",
         "Payroll Taxes (YW)",
         "Professional Services (YW)",
     ],
-    "Payroll Corporate*": [
+    "Payroll Corporate": [
         "Salary (Corporate)",
         "Payroll Taxes (Corporate)",
         "Professional Services (Corporate)",
     ],
-    "Other Payroll Expenses*": ["Benefits"],
-    "Suppliers*": [
+    "Other Payroll Expenses": ["Benefits"],
+    "Suppliers": [
         "General Suppliers",
         "Matchday",
         "Matchday Suppliers",
@@ -63,7 +63,7 @@ OUTFLOW_CATEGORIES = {
         "Utility Bills",
         "Merchandising",
     ],
-    "Taxes*": [
+    "Taxes": [
         "Football Specific Tribute (TEF)",
         "Other Taxes",
     ],
@@ -129,9 +129,9 @@ def initialize_database() -> None:
         existing = connection.execute("SELECT COUNT(*) FROM outflow_items").fetchone()[0]
         if existing == 0:
             seed_items = [
-                ("Outflow", "Suppliers*", "Matchday", "Synergia")
+                ("Outflow", "Suppliers", "Matchday", "Synergia")
                 + (150_000.0,) * 12,
-                ("Outflow", "Suppliers*", "Matchday", "JP Rio") + (80_000.0,) * 12,
+                ("Outflow", "Suppliers", "Matchday", "JP Rio") + (80_000.0,) * 12,
             ]
             connection.executemany(
                 """
@@ -406,15 +406,59 @@ summary = compute_summary(edited_items)
 
 st.subheader("Resumo Mensal")
 highlight_rows = ["SALDO ACUMULADO", "INFLOWS", "OUTFLOWS"]
+bold_rows = set(highlight_rows)
+bold_rows.update(INFLOW_CATEGORIES.keys())
+bold_rows.update(OUTFLOW_CATEGORIES.keys())
 
 
 def highlight_categories(row: pd.Series) -> list[str]:
-    if row.name in highlight_rows:
-        return ["background-color: #f0f2f6; font-weight: 600"] * len(row)
-    return [""] * len(row)
+    styles = []
+    for _ in row:
+        cell_style = ""
+        if row.name in highlight_rows:
+            cell_style += "background-color: #f0f2f6;"
+        if row.name in bold_rows:
+            cell_style += " font-weight: 700;"
+        styles.append(cell_style.strip())
+    return styles
 
 
 styled_summary = summary.style.format(format_currency).apply(
     highlight_categories, axis=1
 )
-st.dataframe(styled_summary, use_container_width=True)
+summary_table = st.dataframe(
+    styled_summary,
+    use_container_width=True,
+    on_select="rerun",
+    selection_mode="single-row",
+    key="summary_table",
+)
+
+selected_rows = st.session_state.get("summary_table", {}).get("selected_rows", [])
+selected_label = summary.index[selected_rows[0]] if selected_rows else None
+
+filtered_items = edited_items
+if selected_label in INFLOW_CATEGORIES:
+    filtered_items = edited_items[
+        edited_items["Categoria"] == selected_label
+    ]
+elif selected_label in OUTFLOW_CATEGORIES:
+    filtered_items = edited_items[
+        edited_items["Categoria"] == selected_label
+    ]
+elif selected_label in SUBCATEGORY_OPTIONS:
+    filtered_items = edited_items[
+        edited_items["Subcategoria"] == selected_label
+    ]
+elif selected_label == "INFLOWS":
+    filtered_items = edited_items[
+        edited_items["Tipo"].str.strip().str.casefold() == "inflow"
+    ]
+elif selected_label == "OUTFLOWS":
+    filtered_items = edited_items[
+        edited_items["Tipo"].str.strip().str.casefold() == "outflow"
+    ]
+
+if selected_label:
+    st.markdown(f"**Itens filtrados: {selected_label}**")
+    st.dataframe(filtered_items, use_container_width=True)
