@@ -163,7 +163,10 @@ def load_outflow_items() -> pd.DataFrame:
     }
     for index, month in enumerate(MONTHS, start=4):
         data[month] = [row[index] for row in rows]
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    if df.empty:
+        df = pd.DataFrame(columns=["Tipo", "Categoria", "Subcategoria", "Item", *MONTHS])
+    return df
 
 
 def persist_outflow_items(df: pd.DataFrame) -> None:
@@ -217,6 +220,11 @@ def format_currency(value: float) -> str:
 
 def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
     base_series = pd.Series([0.0] * 12, index=MONTHS)
+    required_columns = {"Tipo", "Categoria", "Subcategoria", *MONTHS}
+    if not required_columns.issubset(outflow_df.columns):
+        for column in required_columns:
+            if column not in outflow_df.columns:
+                outflow_df[column] = ""
     inflow_subcategories = {
         name: base_series.copy()
         for subcategories in INFLOW_CATEGORIES.values()
