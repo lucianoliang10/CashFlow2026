@@ -404,6 +404,8 @@ if st.button("Salvar alterações"):
     st.success("Alterações salvas.")
 
 summary = compute_summary(edited_items)
+summary_display = summary.copy()
+summary_display.insert(0, "Resumo", summary_display.index)
 
 st.subheader("Resumo Mensal")
 highlight_rows = ["SALDO ACUMULADO", "INFLOWS", "OUTFLOWS"]
@@ -414,29 +416,39 @@ bold_rows.update(OUTFLOW_CATEGORIES.keys())
 
 def highlight_categories(row: pd.Series) -> list[str]:
     styles = []
+    label = row["Resumo"]
     for _ in row:
         cell_style = ""
-        if row.name in highlight_rows:
+        if label in highlight_rows:
             cell_style += "background-color: #f0f2f6;"
-        if row.name in bold_rows:
+        if label in bold_rows:
             cell_style += " font-weight: 700;"
         styles.append(cell_style.strip())
     return styles
 
 
-styled_summary = summary.style.format(format_currency).apply(
-    highlight_categories, axis=1
-)
+styled_summary = summary_display.style.format(
+    format_currency, subset=MONTHS
+).apply(highlight_categories, axis=1)
 summary_table = st.dataframe(
     styled_summary,
     use_container_width=True,
+    height=600,
     on_select="rerun",
     selection_mode="single-row",
     key="summary_table",
 )
 
-selected_rows = st.session_state.get("summary_table", {}).get("selected_rows", [])
-selected_label = summary.index[selected_rows[0]] if selected_rows else None
+selected_rows = []
+if summary_table is not None:
+    selected_rows = list(getattr(summary_table.selection, "rows", []))
+if not selected_rows:
+    selected_rows = (
+        st.session_state.get("summary_table", {}).get("selected_rows", [])
+    )
+selected_label = (
+    summary_display["Resumo"].iloc[selected_rows[0]] if selected_rows else None
+)
 
 filtered_items = edited_items
 if selected_label in INFLOW_CATEGORIES:
