@@ -91,6 +91,7 @@ def initialize_database() -> None:
                 for row in connection.execute("PRAGMA table_info(outflow_items)")
             }
             required = {
+                "id",
                 "entry_type",
                 "category",
                 "subcategory",
@@ -105,6 +106,7 @@ def initialize_database() -> None:
             connection.execute(
                 """
                 CREATE TABLE outflow_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     entry_type TEXT NOT NULL,
                     category TEXT NOT NULL,
                     subcategory TEXT NOT NULL,
@@ -120,8 +122,7 @@ def initialize_database() -> None:
                     m9 REAL NOT NULL,
                     m10 REAL NOT NULL,
                     m11 REAL NOT NULL,
-                    m12 REAL NOT NULL,
-                    PRIMARY KEY (entry_type, category, subcategory, item)
+                    m12 REAL NOT NULL
                 )
                 """
             )
@@ -153,7 +154,7 @@ def load_outflow_items() -> pd.DataFrame:
             SELECT entry_type, category, subcategory, item,
                    m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12
             FROM outflow_items
-            ORDER BY entry_type, category, subcategory, item
+            ORDER BY entry_type, category, subcategory, item, id
             """
         ).fetchall()
     data = {
