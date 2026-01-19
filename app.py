@@ -140,6 +140,17 @@ def persist_outflow_items(df: pd.DataFrame) -> None:
         connection.commit()
 
 
+def format_currency(value: float) -> str:
+    if pd.isna(value):
+        return ""
+    if value == 0:
+        return "-"
+    formatted = f"{abs(value):,.0f}".replace(",", ".")
+    if value < 0:
+        return f"({formatted})"
+    return formatted
+
+
 def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
     base_series = pd.Series([0.0] * 12, index=MONTHS)
     inflow_subcategories = {
@@ -154,8 +165,18 @@ def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
             else:
                 outflow_subcategories[name] = base_series.copy()
 
-    inflow_total = sum(inflow_subcategories.values(), base_series.copy())
-    outflow_total = sum(outflow_subcategories.values(), base_series.copy())
+    inflow_category_totals = {
+        "Football Revenues*": sum(inflow_subcategories.values(), base_series.copy()),
+    }
+    outflow_category_totals = {
+        category: sum(
+            (outflow_subcategories[name] for name in subcategories),
+            base_series.copy(),
+        )
+        for category, subcategories in OUTFLOW_STRUCTURES.items()
+    }
+    inflow_total = sum(inflow_category_totals.values(), base_series.copy())
+    outflow_total = sum(outflow_category_totals.values(), base_series.copy())
     net = inflow_total - outflow_total
 
     saldo = []
@@ -165,21 +186,17 @@ def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
         saldo.append(running)
 
     rows: list[tuple[str, pd.Series | pd.Index]] = []
-    rows.append(("Inflows", pd.Series([pd.NA] * 12, index=MONTHS)))
-    rows.append(("Football Revenues*", inflow_total))
+    rows.append(("Saldo Acumulado", pd.Series(saldo, index=MONTHS)))
+    rows.append(("Inflows", inflow_total))
+    rows.append(("Football Revenues*", inflow_category_totals["Football Revenues*"]))
     for name in INFLOW_SUBCATEGORIES:
         rows.append((name, inflow_subcategories[name]))
-    rows.append(("Outflows", pd.Series([pd.NA] * 12, index=MONTHS)))
+    rows.append(("Outflows", outflow_total))
     for category, subcategories in OUTFLOW_STRUCTURES.items():
-        category_total = sum(
-            (outflow_subcategories[name] for name in subcategories),
-            base_series.copy(),
-        )
-        rows.append((category, category_total))
+        rows.append((category, outflow_category_totals[category]))
         for name in subcategories:
             rows.append((name, outflow_subcategories[name]))
     rows.append(("Net", net))
-    rows.append(("Saldo Acumulado", pd.Series(saldo, index=MONTHS)))
 
     data = {name: values.values for name, values in rows}
     summary = pd.DataFrame(data, index=MONTHS).T
@@ -207,4 +224,5 @@ persist_outflow_items(edited_items)
 summary = compute_summary(edited_items)
 
 st.subheader("Resumo Mensal")
-st.dataframe(summary, use_container_width=True)
+styled_summary = summary.style.format(format_currency)
+st.dataframe(styled_summary, use_container_width=True)
