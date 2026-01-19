@@ -19,20 +19,23 @@ MONTHS = [
     "Nov/26",
     "Dec/26",
 ]
+MONTH_COLUMNS = [f"m{index + 1}" for index in range(12)]
 INITIAL_BALANCE = 25_542_000.00
-INFLOW_SUBCATEGORIES = [
-    "Awards",
-    "Broadcast",
-    "Matchday",
-    "Marketing & Commercial",
-    "Sponsor",
-    "Space Lease",
-    "Fan Program",
-    "Licensing",
-    "Merchandising",
-    "Social Medias",
-]
-OUTFLOW_STRUCTURES = {
+INFLOW_CATEGORIES = {
+    "Football Revenues*": [
+        "Awards",
+        "Broadcast",
+        "Matchday",
+        "Marketing & Commercial",
+        "Sponsor",
+        "Space Lease",
+        "Fan Program",
+        "Licensing",
+        "Merchandising",
+        "Social Medias",
+    ],
+}
+OUTFLOW_CATEGORIES = {
     "Payroll Men’s Football*": [
         "Salary (M)",
         "Image Right",
@@ -64,6 +67,12 @@ OUTFLOW_STRUCTURES = {
         "Other Taxes",
     ],
 }
+CATEGORY_OPTIONS = list(INFLOW_CATEGORIES.keys()) + list(OUTFLOW_CATEGORIES.keys())
+SUBCATEGORY_OPTIONS = [
+    subcategory
+    for subcategories in list(INFLOW_CATEGORIES.values()) + list(OUTFLOW_CATEGORIES.values())
+    for subcategory in subcategories
+]
 
 
 def get_connection() -> sqlite3.Connection:
@@ -72,35 +81,62 @@ def get_connection() -> sqlite3.Connection:
 
 def initialize_database() -> None:
     with get_connection() as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS outflow_items (
-                item TEXT PRIMARY KEY,
-                m1 REAL NOT NULL,
-                m2 REAL NOT NULL,
-                m3 REAL NOT NULL,
-                m4 REAL NOT NULL,
-                m5 REAL NOT NULL,
-                m6 REAL NOT NULL,
-                m7 REAL NOT NULL,
-                m8 REAL NOT NULL,
-                m9 REAL NOT NULL,
-                m10 REAL NOT NULL,
-                m11 REAL NOT NULL,
-                m12 REAL NOT NULL
+        existing_tables = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='outflow_items'"
+        ).fetchone()
+        if existing_tables:
+            columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(outflow_items)")
+            }
+            required = {
+                "entry_type",
+                "category",
+                "subcategory",
+                "item",
+                *MONTH_COLUMNS,
+            }
+            if not required.issubset(columns):
+                connection.execute("DROP TABLE outflow_items")
+                existing_tables = None
+
+        if not existing_tables:
+            connection.execute(
+                """
+                CREATE TABLE outflow_items (
+                    entry_type TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    subcategory TEXT NOT NULL,
+                    item TEXT NOT NULL,
+                    m1 REAL NOT NULL,
+                    m2 REAL NOT NULL,
+                    m3 REAL NOT NULL,
+                    m4 REAL NOT NULL,
+                    m5 REAL NOT NULL,
+                    m6 REAL NOT NULL,
+                    m7 REAL NOT NULL,
+                    m8 REAL NOT NULL,
+                    m9 REAL NOT NULL,
+                    m10 REAL NOT NULL,
+                    m11 REAL NOT NULL,
+                    m12 REAL NOT NULL,
+                    PRIMARY KEY (entry_type, category, subcategory, item)
+                )
+                """
             )
-            """
-        )
+
         existing = connection.execute("SELECT COUNT(*) FROM outflow_items").fetchone()[0]
         if existing == 0:
             seed_items = [
-                ("Synergia",) + (150_000.0,) * 12,
-                ("JP Rio",) + (80_000.0,) * 12,
+                ("Outflow", "Suppliers*", "Matchday", "Synergia")
+                + (150_000.0,) * 12,
+                ("Outflow", "Suppliers*", "Matchday", "JP Rio") + (80_000.0,) * 12,
             ]
             connection.executemany(
                 """
                 INSERT INTO outflow_items (
-                    item, m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12
+                    entry_type, category, subcategory, item, m1, m2, m3, m4, m5, m6,
+                    m7, m8, m9, m10, m11, m12
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -113,13 +149,19 @@ def load_outflow_items() -> pd.DataFrame:
     with get_connection() as connection:
         rows = connection.execute(
             """
-            SELECT item, m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12
+            SELECT entry_type, category, subcategory, item,
+                   m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12
             FROM outflow_items
-            ORDER BY item
+            ORDER BY entry_type, category, subcategory, item
             """
         ).fetchall()
-    data = {"Item": [row[0] for row in rows]}
-    for index, month in enumerate(MONTHS, start=1):
+    data = {
+        "Tipo": [row[0] for row in rows],
+        "Categoria": [row[1] for row in rows],
+        "Subcategoria": [row[2] for row in rows],
+        "Item": [row[3] for row in rows],
+    }
+    for index, month in enumerate(MONTHS, start=4):
         data[month] = [row[index] for row in rows]
     return pd.DataFrame(data)
 
@@ -130,10 +172,19 @@ def persist_outflow_items(df: pd.DataFrame) -> None:
         items = []
     else:
         cleaned["Item"] = cleaned["Item"].astype(str).str.strip()
+        cleaned["Tipo"] = cleaned["Tipo"].astype(str).str.strip()
+        cleaned["Categoria"] = cleaned["Categoria"].astype(str).str.strip()
+        cleaned["Subcategoria"] = cleaned["Subcategoria"].astype(str).str.strip()
         for month in MONTHS:
             cleaned[month] = pd.to_numeric(cleaned[month], errors="coerce").fillna(0.0)
         items = [
-            (row["Item"],) + tuple(row[month] for month in MONTHS)
+            (
+                row["Tipo"],
+                row["Categoria"],
+                row["Subcategoria"],
+                row["Item"],
+            )
+            + tuple(row[month] for month in MONTHS)
             for _, row in cleaned.iterrows()
         ]
     with get_connection() as connection:
@@ -142,7 +193,8 @@ def persist_outflow_items(df: pd.DataFrame) -> None:
             connection.executemany(
                 """
                 INSERT INTO outflow_items (
-                    item, m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12
+                    entry_type, category, subcategory, item, m1, m2, m3, m4, m5, m6,
+                    m7, m8, m9, m10, m11, m12
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -166,27 +218,41 @@ def format_currency(value: float) -> str:
 def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
     base_series = pd.Series([0.0] * 12, index=MONTHS)
     inflow_subcategories = {
-        name: base_series.copy() for name in INFLOW_SUBCATEGORIES
+        name: base_series.copy()
+        for subcategories in INFLOW_CATEGORIES.values()
+        for name in subcategories
     }
-    outflow_values = outflow_df[MONTHS].apply(pd.to_numeric, errors="coerce").fillna(0.0)
-    outflow_matchday = outflow_values.sum(axis=0)
-    outflow_subcategories: dict[str, pd.Series] = {}
-    for category, subcategories in OUTFLOW_STRUCTURES.items():
-        for name in subcategories:
-            if category == "Suppliers*" and name == "Matchday":
-                outflow_subcategories[name] = outflow_matchday
-            else:
-                outflow_subcategories[name] = base_series.copy()
+    outflow_subcategories = {
+        name: base_series.copy()
+        for subcategories in OUTFLOW_CATEGORIES.values()
+        for name in subcategories
+    }
+
+    values = outflow_df[MONTHS].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    inflow_mask = outflow_df["Tipo"].str.strip().str.casefold() == "inflow"
+    outflow_mask = outflow_df["Tipo"].str.strip().str.casefold() == "outflow"
+
+    for subcategory in inflow_subcategories:
+        mask = inflow_mask & (outflow_df["Subcategoria"] == subcategory)
+        inflow_subcategories[subcategory] = values[mask].sum(axis=0)
+
+    for subcategory in outflow_subcategories:
+        mask = outflow_mask & (outflow_df["Subcategoria"] == subcategory)
+        outflow_subcategories[subcategory] = values[mask].sum(axis=0)
 
     inflow_category_totals = {
-        "Football Revenues*": sum(inflow_subcategories.values(), base_series.copy()),
+        category: sum(
+            (inflow_subcategories[name] for name in subcategories),
+            base_series.copy(),
+        )
+        for category, subcategories in INFLOW_CATEGORIES.items()
     }
     outflow_category_totals = {
         category: sum(
             (outflow_subcategories[name] for name in subcategories),
             base_series.copy(),
         )
-        for category, subcategories in OUTFLOW_STRUCTURES.items()
+        for category, subcategories in OUTFLOW_CATEGORIES.items()
     }
     inflow_total = sum(inflow_category_totals.values(), base_series.copy())
     outflow_total = sum(outflow_category_totals.values(), base_series.copy())
@@ -199,13 +265,14 @@ def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
         saldo.append(running)
 
     rows: list[tuple[str, pd.Series | pd.Index]] = []
-    rows.append(("Saldo Acumulado", pd.Series(saldo, index=MONTHS)))
-    rows.append(("Inflows", inflow_total))
-    rows.append(("Football Revenues*", inflow_category_totals["Football Revenues*"]))
-    for name in INFLOW_SUBCATEGORIES:
-        rows.append((name, inflow_subcategories[name]))
-    rows.append(("Outflows", outflow_total))
-    for category, subcategories in OUTFLOW_STRUCTURES.items():
+    rows.append(("SALDO ACUMULADO", pd.Series(saldo, index=MONTHS)))
+    rows.append(("INFLOWS", inflow_total))
+    for category, subcategories in INFLOW_CATEGORIES.items():
+        rows.append((category, inflow_category_totals[category]))
+        for name in subcategories:
+            rows.append((name, inflow_subcategories[name]))
+    rows.append(("OUTFLOWS", outflow_total))
+    for category, subcategories in OUTFLOW_CATEGORIES.items():
         rows.append((category, outflow_category_totals[category]))
         for name in subcategories:
             rows.append((name, outflow_subcategories[name]))
@@ -226,10 +293,11 @@ if "outflow_items" not in st.session_state:
 
 outflow_items = st.session_state["outflow_items"]
 
-with st.expander("Detalhar Outflow Matchday", expanded=True):
+with st.expander("Detalhar Itens", expanded=True):
     st.caption(
         "Edite valores diretamente, adicione ou remova linhas, aplique valores "
-        "mensais em lote ou importe uma planilha."
+        "mensais em lote ou importe uma planilha. Classifique cada item por "
+        "categoria e subcategoria."
     )
     upload = st.file_uploader(
         "Importar planilha (Excel)",
@@ -244,11 +312,14 @@ with st.expander("Detalhar Outflow Matchday", expanded=True):
                 "Instale o suporte no ambiente para importar."
             )
         else:
-            expected_columns = {"Item", *MONTHS}
+            expected_columns = {"Tipo", "Categoria", "Subcategoria", "Item", *MONTHS}
             if not expected_columns.issubset(set(imported.columns)):
-                st.error("A planilha precisa ter colunas: Item e Jan/26 a Dec/26.")
+                st.error(
+                    "A planilha precisa ter colunas: Tipo, Categoria, Subcategoria, "
+                    "Item e Jan/26 a Dec/26."
+                )
             else:
-                imported = imported[["Item", *MONTHS]]
+                imported = imported[["Tipo", "Categoria", "Subcategoria", "Item", *MONTHS]]
                 st.session_state["outflow_items"] = imported
                 outflow_items = imported
                 persist_outflow_items(imported)
@@ -257,7 +328,7 @@ with st.expander("Detalhar Outflow Matchday", expanded=True):
     st.markdown("**Aplicar valor mensal em lote**")
     selected_items = st.multiselect(
         "Itens para aplicar",
-        options=outflow_items["Item"].tolist(),
+        options=outflow_items["Item"].dropna().tolist(),
     )
     monthly_value = st.number_input(
         "Valor mensal",
@@ -283,6 +354,24 @@ with st.expander("Detalhar Outflow Matchday", expanded=True):
         num_rows="dynamic",
         use_container_width=True,
         key="outflow_editor",
+        column_config={
+            "Tipo": st.column_config.SelectboxColumn(
+                "Tipo",
+                options=["Inflow", "Outflow"],
+                required=True,
+            ),
+            "Categoria": st.column_config.SelectboxColumn(
+                "Categoria",
+                options=CATEGORY_OPTIONS,
+                required=True,
+            ),
+            "Subcategoria": st.column_config.SelectboxColumn(
+                "Subcategoria",
+                options=SUBCATEGORY_OPTIONS,
+                required=True,
+            ),
+            "Item": st.column_config.TextColumn("Item", required=True),
+        },
     )
 
 if st.button("Salvar alterações"):
@@ -293,7 +382,7 @@ if st.button("Salvar alterações"):
 summary = compute_summary(edited_items)
 
 st.subheader("Resumo Mensal")
-highlight_rows = ["Inflows", "Outflows"]
+highlight_rows = ["SALDO ACUMULADO", "INFLOWS", "OUTFLOWS"]
 
 
 def highlight_categories(row: pd.Series) -> list[str]:
