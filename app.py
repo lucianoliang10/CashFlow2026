@@ -58,6 +58,7 @@ OUTFLOW_CATEGORIES = {
     "Suppliers*": [
         "General Suppliers",
         "Matchday",
+        "Matchday Suppliers",
         "Logistics Expenses",
         "Utility Bills",
         "Merchandising",
