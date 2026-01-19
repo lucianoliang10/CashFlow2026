@@ -143,11 +143,10 @@ def persist_outflow_items(df: pd.DataFrame) -> None:
 def format_currency(value: float) -> str:
     if pd.isna(value):
         return ""
-    scaled = value / 1000
-    if scaled == 0:
+    if value == 0:
         return "-"
-    formatted = f"{abs(scaled):,.0f}".replace(",", ".")
-    if scaled < 0:
+    formatted = f"{abs(value):,.0f}".replace(",", ".")
+    if value < 0:
         return f"({formatted})"
     return formatted
 
@@ -197,6 +196,7 @@ def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
         rows.append((category, outflow_category_totals[category]))
         for name in subcategories:
             rows.append((name, outflow_subcategories[name]))
+    rows.append(("Net", net))
 
     data = {name: values.values for name, values in rows}
     summary = pd.DataFrame(data, index=MONTHS).T
@@ -224,16 +224,5 @@ persist_outflow_items(edited_items)
 summary = compute_summary(edited_items)
 
 st.subheader("Resumo Mensal")
-highlight_rows = ["Inflows", "Outflows"]
-
-
-def highlight_categories(row: pd.Series) -> list[str]:
-    if row.name in highlight_rows:
-        return ["background-color: #f0f2f6; font-weight: 600"] * len(row)
-    return [""] * len(row)
-
-
-styled_summary = summary.style.format(format_currency).apply(
-    highlight_categories, axis=1
-)
+styled_summary = summary.style.format(format_currency)
 st.dataframe(styled_summary, use_container_width=True)
