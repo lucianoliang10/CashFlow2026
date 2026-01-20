@@ -292,9 +292,48 @@ def compute_summary(outflow_df: pd.DataFrame) -> pd.DataFrame:
     return summary
 
 
-st.set_page_config(page_title="CashFlow 2026", layout="wide")
+st.set_page_config(
+    page_title="CashFlow 2026", layout="wide", page_icon="logo.svg"
+)
 
-st.title("Projeção de Caixa 2026")
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-color: #0B0B0B;
+        color: #F5F5F5;
+    }
+    h1, h2, h3, h4, h5, h6 {
+        color: #FFFFFF;
+    }
+    [data-testid="stHeader"] {
+        background: transparent;
+    }
+    [data-testid="stDataFrame"] {
+        background-color: #0F0F0F;
+    }
+    .stButton > button {
+        background-color: #FFFFFF;
+        color: #0B0B0B;
+        border: none;
+        border-radius: 6px;
+        padding: 0.4rem 1rem;
+        font-weight: 600;
+    }
+    .stButton > button:hover {
+        background-color: #E6E6E6;
+        color: #0B0B0B;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+header_left, header_right = st.columns([1, 6])
+with header_left:
+    st.image("logo.svg", width=120)
+with header_right:
+    st.title("Projeção de Caixa 2026")
 
 initialize_database()
 
@@ -445,7 +484,7 @@ def highlight_categories(row: pd.Series) -> list[str]:
     for _ in row:
         cell_style = ""
         if label in highlight_rows:
-            cell_style += "background-color: #f0f2f6;"
+            cell_style += "background-color: #1A1A1A;"
         if label in bold_rows:
             cell_style += " font-weight: 700;"
         styles.append(cell_style.strip())
