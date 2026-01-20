@@ -172,7 +172,7 @@ def load_outflow_items() -> pd.DataFrame:
 
 
 def persist_outflow_items(df: pd.DataFrame) -> None:
-    cleaned = df.dropna(subset=["Item"]).copy()
+    cleaned = df.drop(columns=["_row_id"], errors="ignore").dropna(subset=["Item"]).copy()
     if cleaned.empty:
         items = []
     else:
@@ -299,9 +299,17 @@ st.title("Projeção de Caixa 2026")
 initialize_database()
 
 if "outflow_items" not in st.session_state:
-    st.session_state["outflow_items"] = load_outflow_items()
+    items = load_outflow_items()
+    if "_row_id" not in items.columns:
+        items = items.reset_index(drop=True)
+        items["_row_id"] = items.index
+    st.session_state["outflow_items"] = items
 
 outflow_items = st.session_state["outflow_items"]
+if "_row_id" not in outflow_items.columns:
+    outflow_items = outflow_items.reset_index(drop=True)
+    outflow_items["_row_id"] = outflow_items.index
+    st.session_state["outflow_items"] = outflow_items
 
 with st.expander("Detalhar Itens", expanded=True):
     st.caption(
@@ -379,6 +387,7 @@ with st.expander("Detalhar Itens", expanded=True):
         use_container_width=True,
         key="outflow_editor",
         column_config={
+            "_row_id": None,
             "Tipo": st.column_config.SelectboxColumn(
                 "Tipo",
                 options=["Inflow", "Outflow"],
@@ -434,6 +443,7 @@ summary_table = st.dataframe(
     styled_summary,
     use_container_width=True,
     height=600,
+    column_config={"Resumo": None},
     on_select="rerun",
     selection_mode="single-row",
     key="summary_table",
@@ -474,4 +484,37 @@ elif selected_label == "OUTFLOWS":
 
 if selected_label:
     st.markdown(f"**Itens filtrados: {selected_label}**")
-    st.dataframe(filtered_items, use_container_width=True)
+    filtered_editor = st.data_editor(
+        filtered_items,
+        hide_index=True,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="filtered_editor",
+        column_config={
+            "_row_id": None,
+            "Tipo": st.column_config.SelectboxColumn(
+                "Tipo",
+                options=["Inflow", "Outflow"],
+                required=True,
+            ),
+            "Categoria": st.column_config.SelectboxColumn(
+                "Categoria",
+                options=CATEGORY_OPTIONS,
+                required=True,
+            ),
+            "Subcategoria": st.column_config.SelectboxColumn(
+                "Subcategoria",
+                options=SUBCATEGORY_OPTIONS,
+                required=True,
+            ),
+            "Item": st.column_config.TextColumn("Item", required=True),
+        },
+    )
+    if st.button("Aplicar edições do filtro"):
+        updated_items = outflow_items.set_index("_row_id")
+        updated_filtered = filtered_editor.set_index("_row_id")
+        updated_items.update(updated_filtered)
+        updated_items = updated_items.reset_index()
+        st.session_state["outflow_items"] = updated_items
+        outflow_items = updated_items
+        st.success("Edições do filtro aplicadas.")
