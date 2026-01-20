@@ -511,7 +511,7 @@ summary_table = st.dataframe(
     styled_summary,
     use_container_width=True,
     height=600,
-    column_config={"Resumo": None},
+    hide_index=True,
     on_select="rerun",
     selection_mode="single-row",
     key="summary_table",
