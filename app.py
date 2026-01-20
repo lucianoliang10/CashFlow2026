@@ -311,7 +311,7 @@ if "_row_id" not in outflow_items.columns:
     outflow_items["_row_id"] = outflow_items.index
     st.session_state["outflow_items"] = outflow_items
 
-with st.expander("Detalhar Itens", expanded=True):
+with st.expander("Lançamento de novos itens", expanded=False):
     st.caption(
         "Edite valores diretamente, adicione ou remova linhas, aplique valores "
         "mensais em lote ou importe uma planilha. Classifique cada item por "
