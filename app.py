@@ -299,54 +299,41 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    :root {
-        color-scheme: dark;
-    }
     .stApp {
-        background: radial-gradient(circle at top left, #1B1D22 0%, #0E1117 45%, #0B0D12 100%);
-        color: #F8FAFC;
-        font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+        background-color: #0B0B0B;
+        color: #F5F5F5;
     }
     h1, h2, h3, h4, h5, h6 {
         color: #FFFFFF;
-        letter-spacing: 0.02em;
     }
     [data-testid="stHeader"] {
         background: transparent;
     }
     [data-testid="stDataFrame"] {
-        background-color: #11141B;
-        border-radius: 12px;
-        border: 1px solid #1F2430;
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+        background-color: #0F0F0F;
     }
     .stButton > button {
-        background: linear-gradient(135deg, #FFFFFF 0%, #DCE2E9 100%);
-        color: #0B0D12;
-        border: 1px solid #FFFFFF;
-        border-radius: 10px;
-        padding: 0.45rem 1.1rem;
-        font-weight: 700;
+        background-color: #FFFFFF;
+        color: #0B0B0B;
+        border: none;
+        border-radius: 6px;
+        padding: 0.4rem 1rem;
+        font-weight: 600;
     }
     .stButton > button:hover {
-        background: #F8FAFC;
-        color: #0B0D12;
-        border-color: #F8FAFC;
-    }
-    .stMarkdown strong {
-        color: #FFFFFF;
+        background-color: #E6E6E6;
+        color: #0B0B0B;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-header_left, header_right = st.columns([1, 6], vertical_alignment="center")
+header_left, header_right = st.columns([1, 6])
 with header_left:
-    st.image("logo.svg", width=96)
+    st.image("logo.svg", width=120)
 with header_right:
     st.title("Projeção de Caixa 2026")
-    st.caption("Relatório de projeção de caixa com visão mensal e drill-down.")
 
 initialize_database()
 
