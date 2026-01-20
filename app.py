@@ -303,7 +303,7 @@ st.markdown(
         color-scheme: dark;
     }
     .stApp {
-        background: radial-gradient(circle at top left, #1B1D22 0%, #0E1117 45%, #0B0D12 100%);
+        background: #010101;
         color: #F8FAFC;
         font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
     }
@@ -315,7 +315,7 @@ st.markdown(
         background: transparent;
     }
     [data-testid="stDataFrame"] {
-        background-color: #11141B;
+        background-color: #0B0D12;
         border-radius: 12px;
         border: 1px solid #1F2430;
         box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
@@ -497,7 +497,7 @@ def highlight_categories(row: pd.Series) -> list[str]:
     for _ in row:
         cell_style = ""
         if label in highlight_rows:
-            cell_style += "background-color: #1A1A1A;"
+            cell_style += "background-color: #9784BF; color: #FFFFFF;"
         if label in bold_rows:
             cell_style += " font-weight: 700;"
         styles.append(cell_style.strip())
