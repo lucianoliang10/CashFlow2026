@@ -1,0 +1,10 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" fill="#0B0B0B"/>
+  <g transform="translate(142 58)">
+    <path d="M114 0C146 16 184 26 228 30C228 124 190 190 114 246C38 190 0 124 0 30C44 26 82 16 114 0Z" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+    <path d="M114 58L129.6 93.2L168 96.2L138.4 121.4L148.8 159.2L114 139.6L79.2 159.2L89.6 121.4L60 96.2L98.4 93.2L114 58Z" fill="#FFFFFF"/>
+  </g>
+  <g transform="translate(80 350)">
+    <text x="176" y="0" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="44" fill="#FFFFFF">SAF BOTAFOGO</text>
+  </g>
+</svg>
