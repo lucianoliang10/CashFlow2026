@@ -311,7 +311,10 @@ if "_row_id" not in outflow_items.columns:
     outflow_items["_row_id"] = outflow_items.index
     st.session_state["outflow_items"] = outflow_items
 
-with st.expander("Lançamento de novos itens", expanded=False):
+
+@st.dialog("Lançamento de novos itens")
+def launch_item_dialog() -> None:
+    global outflow_items
     st.caption(
         "Edite valores diretamente, adicione ou remova linhas, aplique valores "
         "mensais em lote ou importe uma planilha. Classifique cada item por "
@@ -338,6 +341,8 @@ with st.expander("Lançamento de novos itens", expanded=False):
                 )
             else:
                 imported = imported[["Tipo", "Categoria", "Subcategoria", "Item", *MONTHS]]
+                imported = imported.reset_index(drop=True)
+                imported["_row_id"] = imported.index
                 st.session_state["outflow_items"] = imported
                 outflow_items = imported
                 persist_outflow_items(imported)
@@ -406,6 +411,17 @@ with st.expander("Lançamento de novos itens", expanded=False):
             "Item": st.column_config.TextColumn("Item", required=True),
         },
     )
+    if st.button("Salvar alterações no lançamento"):
+        persist_outflow_items(edited_items)
+        st.session_state["outflow_items"] = edited_items
+        outflow_items = edited_items
+        st.success("Alterações salvas.")
+
+
+if st.button("Lançamento de novos itens"):
+    launch_item_dialog()
+
+edited_items = st.session_state["outflow_items"]
 
 if st.button("Salvar alterações"):
     persist_outflow_items(edited_items)
